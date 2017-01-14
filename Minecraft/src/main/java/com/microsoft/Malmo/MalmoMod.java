@@ -31,6 +31,7 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -79,8 +80,12 @@ public class MalmoMod
 
     MalmoModClient client = null;
     MalmoModServer server = null;
+    public boolean isIntegratedServer = false;
     Configuration sessionConfig = null;		// Configs just for this session - used in place of command-line arguments, overwritten by LaunchClient.bat
     Configuration permanentConfig = null;	// Configs that persist - not overwritten by LaunchClient.bat
+
+    ArrayBlockingQueue<Integer> advanceQueue = new ArrayBlockingQueue<Integer>(1);
+    boolean isMissionRunning = false;
 
     @Instance(value = MalmoMod.MODID) //Tell Forge what instance to use.
     public static MalmoMod instance;
@@ -154,6 +159,7 @@ public class MalmoMod
     public void initIntegratedServer(MissionInit minit)
     {
         // Will replace any existing server objects.
+        this.isIntegratedServer = true;
         this.server = new MalmoModServer();
         this.server.init(minit);
     }
@@ -164,6 +170,43 @@ public class MalmoMod
             throw new Exception("Trying to send a mission request directly when no server has been created!");
 
         this.server.sendMissionInitDirectToServer(minit);
+    }
+
+    public void waitForAdvance() {
+        synchronized (this.advanceQueue) {
+            if (!this.isMissionRunning)
+                return;
+        }
+        try {
+            this.advanceQueue.take();
+        } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    public void advance() {
+        try {
+            this.advanceQueue.put(0);
+        } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    public void onMissionStarted() {
+        synchronized (this.advanceQueue) {
+            this.isMissionRunning = true;
+        }
+        this.advanceQueue.clear();
+    }
+
+    public void onMissionEnded() {
+        synchronized (this.advanceQueue) {
+            this.isMissionRunning = false;
+        }
+        // Make sure that server will not wait for advance.
+        this.advanceQueue.offer(0);
     }
 
     public enum MalmoMessageType

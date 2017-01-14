@@ -170,7 +170,7 @@ public class CommandForWheeledRobotNavigationImplementation extends CommandBase
             this.overrideMovement.moveStrafe = (float)((double)this.overrideMovement.moveStrafe * 0.3D);
             this.overrideMovement.moveForward = (float)((double)this.overrideMovement.moveForward * 0.3D);
         }
-        updateYawAndPitch();
+        // updateYawAndPitch();
         return true;
     }
 
@@ -182,12 +182,17 @@ public class CommandForWheeledRobotNavigationImplementation extends CommandBase
     	// (We need to do this because we can't guarantee that this method will be
     	// called at a constant frequency.)
     	long timeNow = System.currentTimeMillis();
-    	long deltaTime = timeNow - this.lastAngularUpdateTime;
+        long deltaTime = 50;
     	this.lastAngularUpdateTime = timeNow;
     	
     	// Work out how much the yaw and pitch should have changed in that time:
-    	double overclockScale = 50.0 / (double)TimeHelper.serverTickLength;
-    	double deltaYaw = this.yawScale * overclockScale * this.maxAngularVelocityDegreesPerSecond * (deltaTime / 1000.0);
+        double overclockScale = 1;
+        if (!TimeHelper.lockStepped) {
+            overclockScale = 50.0 / (double) TimeHelper.serverTickLength;
+            deltaTime = timeNow - this.lastAngularUpdateTime;
+        }
+        double deltaYaw = this.yawScale * overclockScale * this.maxAngularVelocityDegreesPerSecond
+                * (deltaTime / 1000.0);
     	double deltaPitch = this.pitchScale * overclockScale * this.maxAngularVelocityDegreesPerSecond * (deltaTime / 1000.0);
 
     	// And update them:

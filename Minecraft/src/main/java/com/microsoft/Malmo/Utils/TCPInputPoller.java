@@ -52,6 +52,7 @@ public class TCPInputPoller extends Thread
     private boolean choosePortRandomly = false;
     private ServerSocket serverSocket;
     private boolean failedToCreate = false;
+    private Integer numConnections = 0;
 
     /**
      * Manually add a command to the command queue.<br>
@@ -209,6 +210,9 @@ public class TCPInputPoller extends Thread
             if (socket != null)
             {
                 Runnable connectionHandler = new TCPConnectionHandler(socket, this);
+                synchronized (this.numConnections) {
+                    ++this.numConnections;
+                }
                 new Thread(connectionHandler).start();
             }
         }
@@ -238,6 +242,12 @@ public class TCPInputPoller extends Thread
         }
     }
 
+    public boolean hasActiveConnection() {
+        synchronized (this.numConnections) {
+            return this.numConnections > 0;
+        }
+    }
+
     /** Override this if you want instant notification of each command as it comes in.
      * @param command the command just received
      * @param ipFrom the IP Address which sent the command
@@ -247,6 +257,12 @@ public class TCPInputPoller extends Thread
     public boolean onCommand(String command, String ipFrom, DataOutputStream dos)
     {
         return true;
+    }
+
+    public void onConnectionQuit() {
+        synchronized (this.numConnections) {
+            --this.numConnections;
+        }
     }
 
     /** Override this if you want notification of errors in the input stream.
@@ -341,6 +357,8 @@ public class TCPInputPoller extends Thread
             {
                 System.out.println("~~~~~~~~ Socket stream error: " + e);
             }
+            poller.onConnectionQuit();
+            System.out.println(" --- TCPConnectionHandler quit ---");
         }
     }
 }

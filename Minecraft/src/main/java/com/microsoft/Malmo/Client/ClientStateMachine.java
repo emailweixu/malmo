@@ -1458,6 +1458,7 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
         {
             // Open our communication channels:
             openSockets();
+            MalmoMod.instance.onMissionStarted();
 
             // Tell the server we have started:
             HashMap<String, String> map = new HashMap<String, String>();
@@ -1489,7 +1490,7 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
             // Overclocking:
             ModSettings modsettings = currentMissionInit().getMission().getModSettings();
             if (modsettings != null && modsettings.getMsPerTick() != null)
-                TimeHelper.setMinecraftClientClockSpeed(1000 / modsettings.getMsPerTick());
+                TimeHelper.setMsPerTickForClient(modsettings.getMsPerTick());
             if (modsettings != null && modsettings.isPrioritiseOffscreenRendering() == Boolean.TRUE)
                 TimeHelper.displayGranularityMs = 1000;
         }
@@ -1518,7 +1519,7 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
             this.videoHook.stop();
 
             // Return Minecraft speed to "normal":
-            TimeHelper.setMinecraftClientClockSpeed(20);
+            TimeHelper.setMsPerTickForClient(50);
             TimeHelper.displayGranularityMs = 0;
 
             ClientStateMachine.this.missionQuitCode = this.quitCode;
@@ -1614,6 +1615,7 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
                     map.put("agentname", agentName);
                     map.put("username", Minecraft.getMinecraft().thePlayer.getName());
                     MalmoMod.network.sendToServer(new MalmoMod.MalmoMessage(MalmoMessageType.CLIENT_AGENTFINISHEDMISSION, 0, map));
+                    MalmoMod.instance.onMissionEnded();
                     onMissionEnded(ClientState.IDLING, null);
                 }
                 else
@@ -1622,6 +1624,9 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
                     sendData();
                     // And see if we have any incoming commands to act upon:
                     checkForControlCommand();
+                    if (TimeHelper.lockStepped) {
+                        MalmoMod.instance.advance();
+                    }
                 }
             }
         }
@@ -1711,17 +1716,30 @@ public class ClientStateMachine extends StateMachine implements IMalmoMessageLis
             boolean quitHandlerFired = false;
             IWantToQuit quitHandler = (currentMissionBehaviour() != null) ? currentMissionBehaviour().quitProducer : null;
 
-            command = ClientStateMachine.this.controlInputPoller.getCommand();
-            while (command != null && command.length() > 0 && !quitHandlerFired)
-            {
-                // Pass the command to our various control overrides:
-                boolean handled = handleCommand(command);
-                // Get the next command:
+            while (ClientStateMachine.this.controlInputPoller.hasActiveConnection()) {
                 command = ClientStateMachine.this.controlInputPoller.getCommand();
-                // If there *is* another command (commands came in faster than one per client tick),
-                // then we should check our quit producer before deciding whether to execute it.
-                if (command != null && command.length() > 0 && handled)
-                    quitHandlerFired = (quitHandler != null && quitHandler.doIWantToQuit(currentMissionInit()));
+	            while (command != null && command.length() > 0 && !quitHandlerFired)
+	            {
+	                // Pass the command to our various control overrides:
+	                boolean handled = handleCommand(command);
+	                if (command.equalsIgnoreCase("advance")) break;
+	                // Get the next command:
+	                command = ClientStateMachine.this.controlInputPoller.getCommand();
+	                // If there *is* another command (commands came in faster than one per client tick),
+	                // then we should check our quit producer before deciding whether to execute it.
+	                if (command != null && command.length() > 0 && handled)
+	                    quitHandlerFired = (quitHandler != null && quitHandler.doIWantToQuit(currentMissionInit()));
+	            }
+	            if (!TimeHelper.lockStepped) break;
+	            if (command.equalsIgnoreCase("advance")) break;
+                if (command == null || command.length() == 0) {
+                    try {
+                        Thread.sleep(1);
+                    } catch (InterruptedException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+                }
             }
         }
 

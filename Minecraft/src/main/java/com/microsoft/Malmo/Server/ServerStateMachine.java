@@ -976,8 +976,9 @@ public class ServerStateMachine extends StateMachine
                 }
             }
             ModSettings modsettings = currentMissionInit().getMission().getModSettings();
-            if (modsettings != null && modsettings.getMsPerTick() != null)
-                TimeHelper.serverTickLength = (long)(modsettings.getMsPerTick());
+            if (modsettings != null && modsettings.getMsPerTick() != null) {
+                TimeHelper.setMsPerTick(modsettings.getMsPerTick());
+            }
                 
             if (getHandlers().quitProducer != null)
                 getHandlers().quitProducer.prepare(currentMissionInit());
@@ -1005,7 +1006,7 @@ public class ServerStateMachine extends StateMachine
                     this.secondStartTimeMs = System.currentTimeMillis();
 
                 long timeNow = System.currentTimeMillis();
-                if (timeNow - this.secondStartTimeMs > 1000)
+                if (timeNow - this.secondStartTimeMs > 1000 && !TimeHelper.lockStepped)
                 {
                     long targetTicks = 1000 / TimeHelper.serverTickLength;
                     if (this.tickCount < targetTicks)
@@ -1045,6 +1046,10 @@ public class ServerStateMachine extends StateMachine
                 if (MinecraftServer.getServer().getTickCounter() % 500 == 0)
                 {
                     EnvironmentHelper.setMissionWeather(currentMissionInit());
+                }
+                if (TimeHelper.lockStepped)
+                {
+                    MalmoMod.instance.waitForAdvance();
                 }
             }
         }

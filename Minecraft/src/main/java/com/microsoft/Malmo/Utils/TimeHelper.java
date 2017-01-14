@@ -21,6 +21,8 @@ package com.microsoft.Malmo.Utils;
 
 import java.lang.reflect.Field;
 
+import com.microsoft.Malmo.MalmoMod;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.util.Timer;
@@ -37,9 +39,19 @@ public class TimeHelper
     public final static float MillisecondsPerWorldTick = 50.0f;
     public final static float MillisecondsPerSecond = 1000.0f;
     public static long serverTickLength = 50;
+    public static boolean lockStepped = false;
     public static long displayGranularityMs = 0;  // How quickly we allow the Minecraft window to update.
     private static long lastUpdateTimeMs;
 
+    /**
+     * Set ms per tick for the mission
+     * @param msPerTick milliseconds per tick
+     */
+    public static void setMsPerTick(long msPerTick) {
+        serverTickLength = msPerTick;
+        // lockstep is only supported in integrated server mode.
+        lockStepped = msPerTick <= 1 && MalmoMod.instance.isIntegratedServer;
+    }
     /** Very simple stopwatch-style timer class; times in WorldTicks.
      */
     static public class WorldTimer
@@ -80,8 +92,12 @@ public class TimeHelper
             return duration * MillisecondsPerWorldTick;
         }
     }
-    
-    static public boolean setMinecraftClientClockSpeed(float ticksPerSecond)
+    /**
+     * Set ms per tick from client side.
+     * @param msPerTick milliseconds per tick
+     * @return true if success
+     */
+    static public boolean setMsPerTickForClient(long msPerTick)
     {
         boolean devEnv = (Boolean) Launch.blackboard.get("fml.deobfuscatedEnvironment");
         // We need to know, because the member name will either be obfuscated or not.
@@ -92,7 +108,11 @@ public class TimeHelper
         {
             timer = Minecraft.class.getDeclaredField(timerMemberName);
             timer.setAccessible(true);
-            timer.set(Minecraft.getMinecraft(), new Timer(ticksPerSecond));
+            if (msPerTick > 1)
+                timer.set(Minecraft.getMinecraft(), new Timer(1000 / msPerTick));
+            else
+                timer.set(Minecraft.getMinecraft(), new LockSteppedTimer());
+            setMsPerTick(msPerTick);
             return true;
         }
         catch (SecurityException e)
